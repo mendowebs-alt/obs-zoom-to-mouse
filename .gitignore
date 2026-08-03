@@ -1,2 +1,83 @@
-# Prevent uploading ljsocket.lua into this repo by accident
-ljsocket.lua
+```lua
+-- Compiled and build artifacts
+*.pyc
+__pycache__/
+*.o
+*.obj
+*.class
+*.exe
+*.dll
+*.so
+*.a
+*.out
+
+-- Dependencies
+node_modules/
+venv/
+.venv/
+.env
+.env.local
+.env.*
+
+-- Build directories
+dist/
+build/
+target/
+*.jar
+*.war
+*.zip
+*.tar.gz
+
+-- Editor/IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*.tmp
+
+-- System files
+.DS_Store
+Thumbs.db
+*.log
+
+-- Coverage and testing
+coverage/
+htmlcov/
+.coverage
+.mypy_cache/
+.pytest_cache/
+
+-- Gradle
+.gradle/
+
+-- Julia
+.julia/
+
+-- Zig
+.zig-cache/
+zig-cache/
+
+-- Temporary and cache files
+*.tmp
+*.temp
+*.cache
+*.log
+
+-- Configuration and environment files
+config/
+secrets/
+credentials/
+*.key
+*.pem
+*.crt
+*.cert
+
+-- OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+```

@@ -87,6 +87,70 @@ local m1, m2 = version:match("(%d+%.%d+)%.(%d+)")
 local major = tonumber(m1) or 0
 local minor = tonumber(m2) or 0
 
+-- Detectar versión de OBS para usar la API correcta
+-- OBS 30.0+ usa obs_sceneitem_get_info2/set_info2 con estructura diferente
+local use_new_api = (major >= 30) or (major == 29 and minor >= 2)
+
+-- Funciones wrapper para compatibilidad con diferentes versiones de OBS
+local obs_sceneitem_get_info_func
+local obs_sceneitem_set_info_func
+local obs_transform_info_func
+local obs_sceneitem_crop_func
+
+if use_new_api then
+    -- OBS 30+ API
+    obs_sceneitem_get_info_func = function(sceneitem, info)
+        local result = obs.obs_sceneitem_get_info2(sceneitem)
+        if result and info then
+            -- Copiar los valores a la estructura existente
+            info.pos = result.pos
+            info.scale = result.scale
+            info.rot = result.rot
+            info.alignment = result.alignment
+            info.bounds_type = result.bounds_type
+            info.bounds_alignment = result.bounds_alignment
+            info.bounds = result.bounds
+        end
+        return result
+    end
+    
+    obs_sceneitem_set_info_func = function(sceneitem, info)
+        return obs.obs_sceneitem_set_info2(sceneitem, info)
+    end
+    
+    obs_transform_info_func = function()
+        return obs.obs_transform_info2()
+    end
+    
+    obs_sceneitem_crop_func = function()
+        return obs.obs_sceneitem_crop()
+    end
+else
+    -- OBS < 30 API
+    obs_sceneitem_get_info_func = function(sceneitem, info)
+        return obs.obs_sceneitem_get_info(sceneitem, info)
+    end
+    
+    obs_sceneitem_set_info_func = function(sceneitem, info)
+        return obs.obs_sceneitem_set_info(sceneitem, info)
+    end
+    
+    obs_transform_info_func = function()
+        return obs.obs_transform_info()
+    end
+    
+    obs_sceneitem_crop_func = function()
+        return obs.obs_sceneitem_crop()
+    end
+end
+
+-- Constantes compatibles con todas las versiones
+local OBS_BOUNDS_NONE = obs.OBS_BOUNDS_NONE
+local OBS_BOUNDS_SCALE_INNER = obs.OBS_BOUNDS_SCALE_INNER or obs.OBS_BOUNDS_STRETCH
+local OBS_ALIGN_TOP = obs.OBS_ALIGN_TOP or 1
+local OBS_ALIGN_LEFT = obs.OBS_ALIGN_LEFT or 4
+local OBS_ALIGN_CENTER = obs.OBS_ALIGN_CENTER or 0
+
 -- Define the mouse cursor functions for each platform
 if ffi.os == "Windows" then
     ffi.cdef([[
@@ -448,7 +512,7 @@ function release_sceneitem()
 
         if sceneitem_info_orig ~= nil then
             log("Transform info reset back to original")
-            obs.obs_sceneitem_get_info(sceneitem, sceneitem_info_orig)
+            obs_sceneitem_set_info_func(sceneitem, sceneitem_info_orig)
             sceneitem_info_orig = nil
         end
 
@@ -573,16 +637,16 @@ function refresh_sceneitem(find_newest)
 
     if sceneitem ~= nil then
         -- Capture the original settings so we can restore them later
-        sceneitem_info_orig = obs.obs_transform_info()
-        obs.obs_sceneitem_get_info(sceneitem, sceneitem_info_orig)
+        sceneitem_info_orig = obs_transform_info_func()
+        obs_sceneitem_get_info_func(sceneitem, sceneitem_info_orig)
 
-        sceneitem_crop_orig = obs.obs_sceneitem_crop()
+        sceneitem_crop_orig = obs_sceneitem_crop_func()
         obs.obs_sceneitem_get_crop(sceneitem, sceneitem_crop_orig)
 
-        sceneitem_info = obs.obs_transform_info()
-        obs.obs_sceneitem_get_info(sceneitem, sceneitem_info)
+        sceneitem_info = obs_transform_info_func()
+        obs_sceneitem_get_info_func(sceneitem, sceneitem_info)
 
-        sceneitem_crop = obs.obs_sceneitem_crop()
+        sceneitem_crop = obs_sceneitem_crop_func()
         obs.obs_sceneitem_get_crop(sceneitem, sceneitem_crop)
 
         if is_non_display_capture then
@@ -625,13 +689,13 @@ function refresh_sceneitem(find_newest)
 
         -- Convert the current transform into one we can correctly modify for zooming
         -- Ideally the user just has a valid one set and we don't have to change anything because this might not work 100% of the time
-        if sceneitem_info.bounds_type == obs.OBS_BOUNDS_NONE then
-            sceneitem_info.bounds_type = obs.OBS_BOUNDS_SCALE_INNER
-            sceneitem_info.bounds_alignment = 5 -- (5 == OBS_ALIGN_TOP | OBS_ALIGN_LEFT) (0 == OBS_ALIGN_CENTER)
+        if sceneitem_info.bounds_type == OBS_BOUNDS_NONE then
+            sceneitem_info.bounds_type = OBS_BOUNDS_SCALE_INNER
+            sceneitem_info.bounds_alignment = OBS_ALIGN_TOP + OBS_ALIGN_LEFT -- (5 == OBS_ALIGN_TOP | OBS_ALIGN_LEFT) (0 == OBS_ALIGN_CENTER)
             sceneitem_info.bounds.x = source_width * sceneitem_info.scale.x
             sceneitem_info.bounds.y = source_height * sceneitem_info.scale.y
 
-            obs.obs_sceneitem_set_info(sceneitem, sceneitem_info)
+            obs_sceneitem_set_info_func(sceneitem, sceneitem_info)
 
             log("WARNING: Found existing non-boundingbox transform. This may cause issues with zooming.\n" ..
                 "         Settings have been auto converted to a bounding box scaling transfrom instead.\n" ..
