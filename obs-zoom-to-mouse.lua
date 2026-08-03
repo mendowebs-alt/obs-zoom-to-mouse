@@ -87,7 +87,7 @@ local m1, m2 = version:match("(%d+%.%d+)%.(%d+)")
 local major = tonumber(m1) or 0
 local minor = tonumber(m2) or 0
 
--- Detectar versión de OBS para usar la API correcta
+-- Detectar version de OBS para usar la API correcta
 -- OBS 30.0+ usa obs_sceneitem_get_info2/set_info2 con estructura diferente
 local use_new_api = (major >= 30) or (major == 29 and minor >= 2)
 
@@ -266,26 +266,30 @@ function get_dc_info()
         return {
             source_id = "monitor_capture",
             prop_id = "monitor_id",
-            prop_type = "string"
+            prop_type = "string",
+            alt_ids = {"display_capture"}
         }
     elseif ffi.os == "Linux" then
         return {
             source_id = "xshm_input",
             prop_id = "screen",
-            prop_type = "int"
+            prop_type = "int",
+            alt_ids = {"pipewire_screen_capture", "screen_capture", "wlrobs_output_capture"}
         }
     elseif ffi.os == "OSX" then
         if major > 29.0 then
             return {
                 source_id = "screen_capture",
                 prop_id = "display_uuid",
-                prop_type = "string"
+                prop_type = "string",
+                alt_ids = {"display_capture", "monitor_capture"}
             }
         else
             return {
                 source_id = "display_capture",
                 prop_id = "display",
-                prop_type = "int"
+                prop_type = "int",
+                alt_ids = {"screen_capture", "monitor_capture"}
             }
         end
     end
@@ -466,12 +470,24 @@ function is_display_capture(source_to_check)
         local dc_info = get_dc_info()
         if dc_info ~= nil then
             -- Do a quick check to ensure this is a display capture
-            if allow_all_sources then
-                local source_type = obs.obs_source_get_id(source_to_check)
-                if source_type == dc_info.source_id then
-                    return true
+            local source_type = obs.obs_source_get_id(source_to_check)
+            
+            -- Check primary source ID
+            if source_type == dc_info.source_id then
+                return true
+            end
+            
+            -- Check alternative source IDs for compatibility with different OBS versions
+            if dc_info.alt_ids then
+                for _, alt_id in ipairs(dc_info.alt_ids) do
+                    if source_type == alt_id then
+                        return true
+                    end
                 end
-            else
+            end
+            
+            -- If allow_all_sources is enabled, accept any source
+            if allow_all_sources then
                 return true
             end
         end
@@ -1620,7 +1636,24 @@ function populate_zoom_sources(list)
         obs.obs_property_list_add_string(list, "<None>", "obs-zoom-to-mouse-none")
         for _, source in ipairs(sources) do
             local source_type = obs.obs_source_get_id(source)
-            if source_type == dc_info.source_id or allow_all_sources then
+            local is_display_capture_source = false
+            
+            -- Check primary source ID
+            if dc_info and source_type == dc_info.source_id then
+                is_display_capture_source = true
+            end
+            
+            -- Check alternative source IDs for compatibility with different OBS versions
+            if dc_info and dc_info.alt_ids then
+                for _, alt_id in ipairs(dc_info.alt_ids) do
+                    if source_type == alt_id then
+                        is_display_capture_source = true
+                        break
+                    end
+                end
+            end
+            
+            if is_display_capture_source or allow_all_sources then
                 local name = obs.obs_source_get_name(source)
                 obs.obs_property_list_add_string(list, name, name)
             end
